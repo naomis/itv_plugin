@@ -19,11 +19,8 @@ class ITVPluginMain:
 
     def initGui(self):
         """Initialise l'interface du plugin dans QGIS"""
-        # Crée une action dans le menu pour ouvrir le plugin
         self.action = QAction("ITV Plugin QGIS", self.iface.mainWindow())
         self.action.triggered.connect(self.run)
-        
-        # Ajoute l'action au menu "Plugins" de QGIS
         self.iface.addPluginToMenu("&ITV Plugin QGIS", self.action)
 
     def unload(self):
@@ -48,7 +45,6 @@ class ITVPluginMain:
             self.window = QMainWindow()
             self.ui = Ui_selectFileButton()
             self.ui.setupUi(self.window)
-            # Connecte le bouton de sélection de fichier et d'importation
             self.ui.pushButton.clicked.connect(self.select_file)
             self.ui.loadCollecteurButton.clicked.connect(self.select_collecteur_file)
             self.ui.loadRegardButton.clicked.connect(self.select_regard_file)
@@ -57,7 +53,7 @@ class ITVPluginMain:
             self.ui.importButton.clicked.connect(self.import_shapefile_regard)
             self.ui.importButton.clicked.connect(self.load_data_to_table)
             self.populate_database_connections()
-            self.list_qgis_connections()  # Appeler la fonction pour remplir la liste déroulante
+            self.list_qgis_connections()  
             self.ui.pushButton_testconnection.clicked.connect(self.test_selected_connection)
             self.ui.loadCollecteurButton_correspondance.clicked.connect(self.select_collecteur_correspondance_file)
             self.ui.loadRegardButton_correspondance.clicked.connect(self.select_regard_correspondance_file)
@@ -678,62 +674,339 @@ class ITVPluginMain:
         """
         self.ui.progressBar.setValue(0)
 
+    def load_ids_tables(self, inspection_gid):
+        """
+        Charge les tables `ids_coll` et `ids_reg` dans QGIS pour une inspection donnée (sans géométrie, comme des tables CSV).
+        Affiche également les données dans les logs.
+        """
+        try:
+            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
+            selected_connection = self.ui.comboBoxConnections.currentText()
+            if not selected_connection:
+                self.log_message("Erreur : Aucune connexion sélectionnée.")
+                QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
+                return
+
+            settings = QgsSettings()
+            prefix = f"PostgreSQL/connections/{selected_connection}/"
+
+            dbname = settings.value(prefix + "database", "")
+            user = self.ui.lineEditDatabaseUser.text() or settings.value(prefix + "username", "")
+            password = self.ui.lineEditDatabasePassword.text() or settings.value(prefix + "password", "")
+            host = settings.value(prefix + "host", "localhost")
+            port = settings.value(prefix + "port", "5432")
+
+            if not dbname or not user or not password:
+                self.log_message("Erreur : Les informations de connexion sont incomplètes.")
+                QMessageBox.critical(self.window, "Erreur", "Les informations de connexion sont incomplètes.")
+                return
+
+            # Connexion à PostgreSQL
+            conn = psycopg2.connect(
+                dbname=dbname,
+                user=user,
+                password=password,
+                host=host,
+                port=port
+            )
+            cursor = conn.cursor()
+
+            # Charger et afficher les données de `ids_coll`
+            query_coll = f"SELECT * FROM itv.ids_coll WHERE inspection_gid = {inspection_gid}"
+            cursor.execute(query_coll)
+            rows_coll = cursor.fetchall()
+            if rows_coll:
+                self.log_message(f"Données de 'ids_coll' pour inspection_gid={inspection_gid} :")
+                for row in rows_coll:
+                    self.log_message(str(row))
+
+                # Écrire les données dans un fichier CSV temporaire
+                temp_csv_coll = os.path.join(os.getenv("TEMP"), f"ids_coll_{inspection_gid}.csv")
+                with open(temp_csv_coll, "w", encoding="utf-8") as f:
+                    f.write("id,inspection_gid,name,extra\n")  # Ajouter les en-têtes
+                    for row in rows_coll:
+                        f.write(",".join([str(item) if item is not None else "" for item in row]) + "\n")
+
+                # Charger le fichier CSV dans QGIS comme une table sans géométrie
+                uri_coll = f"file:///{temp_csv_coll}?delimiter=,&crs=EPSG:4326&skipLines=0&useHeader=Yes"
+                layer_coll = QgsVectorLayer(uri_coll, f"ids_coll - Inspection {inspection_gid}", "delimitedtext")
+                if layer_coll.isValid():
+                    QgsProject.instance().addMapLayer(layer_coll)
+                    self.log_message(f"Table 'ids_coll' pour l'inspection {inspection_gid} ajoutée avec succès à QGIS comme table sans géométrie.")
+                else:
+                    self.log_message(f"Erreur : Impossible de charger la table 'ids_coll' pour l'inspection {inspection_gid} dans QGIS.")
+            else:
+                self.log_message(f"Aucune donnée trouvée dans 'ids_coll' pour inspection_gid={inspection_gid}.")
+
+            # Charger et afficher les données de `ids_reg`
+            query_reg = f"SELECT * FROM itv.ids_reg WHERE inspection_gid = {inspection_gid}"
+            cursor.execute(query_reg)
+            rows_reg = cursor.fetchall()
+            if rows_reg:
+                self.log_message(f"Données de 'ids_reg' pour inspection_gid={inspection_gid} :")
+                for row in rows_reg:
+                    self.log_message(str(row))
+
+                # Écrire les données dans un fichier CSV temporaire
+                temp_csv_reg = os.path.join(os.getenv("TEMP"), f"ids_reg_{inspection_gid}.csv")
+                with open(temp_csv_reg, "w", encoding="utf-8") as f:
+                    f.write("id,inspection_gid,name,extra\n")  # Ajouter les en-têtes
+                    for row in rows_reg:
+                        f.write(",".join([str(item) if item is not None else "" for item in row]) + "\n")
+
+                # Charger le fichier CSV dans QGIS
+                uri_reg = f"file:///{temp_csv_reg}?delimiter=,&crs=EPSG:4326&skipLines=0&useHeader=Yes"
+                layer_reg = QgsVectorLayer(uri_reg, f"ids_reg - Inspection {inspection_gid}", "delimitedtext")
+                if layer_reg.isValid():
+                    QgsProject.instance().addMapLayer(layer_reg)
+                    self.log_message(f"Table 'ids_reg' pour l'inspection {inspection_gid} ajoutée avec succès à QGIS.")
+                else:
+                    self.log_message(f"Erreur : Impossible de charger la table 'ids_reg' pour l'inspection {inspection_gid} dans QGIS.")
+            else:
+                self.log_message(f"Aucune donnée trouvée dans 'ids_reg' pour inspection_gid={inspection_gid}.")
+
+            # Fermeture de la connexion
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            self.log_message(f"Erreur inattendue lors du chargement des tables : {str(e)}")
+            QMessageBox.critical(self.window, "Erreur", f"Erreur inattendue : {str(e)}")
+
+    def update_ids_coll_from_csv(self, inspection_gid):
+        """
+        Charge le fichier CSV spécifié dans collecteurCorrespondanceFilePathLabel et met à jour la colonne id_sig
+        dans la table itv.ids_coll si elle est NULL et qu'une correspondance existe dans le fichier CSV.
+        """
+        csv_path = self.ui.collecteurCorrespondanceFilePathLabel.text()
+        if not csv_path or not os.path.exists(csv_path):
+            self.log_message("Aucun fichier CSV de correspondance collecteur accessible. Opération ignorée.")
+            return
+
+        try:
+            # Charger le fichier CSV
+            correspondance_data = {}
+            with open(csv_path, "r", encoding="utf-8") as f:
+                headers = f.readline().strip().split(",")  # Lire les en-têtes
+                id_troncon_index = headers.index("id_troncon")
+                id_sig_index = headers.index("id_sig")
+
+                for line in f:
+                    values = line.strip().split(",")
+                    id_troncon = values[id_troncon_index]
+                    id_sig = values[id_sig_index] if id_sig_index < len(values) else None
+                    if id_troncon and id_sig:
+                        correspondance_data[id_troncon] = id_sig
+
+            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
+            selected_connection = self.ui.comboBoxConnections.currentText()
+            if not selected_connection:
+                self.log_message("Erreur : Aucune connexion sélectionnée.")
+                QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
+                return
+
+            settings = QgsSettings()
+            prefix = f"PostgreSQL/connections/{selected_connection}/"
+
+            dbname = settings.value(prefix + "database", "")
+            user = self.ui.lineEditDatabaseUser.text() or settings.value(prefix + "username", "")
+            password = self.ui.lineEditDatabasePassword.text() or settings.value(prefix + "password", "")
+            host = settings.value(prefix + "host", "localhost")
+            port = settings.value(prefix + "port", "5432")
+
+            if not dbname or not user or not password:
+                self.log_message("Erreur : Les informations de connexion sont incomplètes.")
+                QMessageBox.critical(self.window, "Erreur", "Les informations de connexion sont incomplètes.")
+                return
+
+            # Connexion à PostgreSQL
+            conn = psycopg2.connect(
+                dbname=dbname,
+                user=user,
+                password=password,
+                host=host,
+                port=port
+            )
+            cursor = conn.cursor()
+
+            # Mettre à jour la colonne id_sig dans itv.ids_coll
+            for id_troncon, id_sig in correspondance_data.items():
+                update_query = """
+                    UPDATE itv.ids_coll
+                    SET id_sig = %s
+                    WHERE id_sig IS NULL AND inspection_gid = %s AND id_itv = %s
+                """
+                cursor.execute(update_query, (id_sig, inspection_gid, id_troncon))
+
+            # Valider les changements
+            conn.commit()
+            self.log_message(f"Mise à jour de la colonne id_sig dans itv.ids_coll terminée avec succès.")
+
+            # Fermeture de la connexion
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            self.log_message(f"Erreur lors de la mise à jour de la table itv.ids_coll : {str(e)}")
+            QMessageBox.critical(self.window, "Erreur", f"Erreur lors de la mise à jour de la table itv.ids_coll : {str(e)}")
+
+    def update_ids_reg_from_csv(self, inspection_gid):
+        """
+        Charge le fichier CSV spécifié dans regardCorrespondanceFilePathLabel et met à jour la colonne id_sig
+        dans la table itv.ids_reg si elle est NULL et qu'une correspondance existe dans le fichier CSV.
+        """
+        csv_path = self.ui.regardCorrespondanceFilePathLabel.text()
+        if not csv_path or not os.path.exists(csv_path):
+            self.log_message("Aucun fichier CSV de correspondance regard accessible. Opération ignorée.")
+            return
+
+        try:
+            # Charger le fichier CSV
+            correspondance_data = {}
+            with open(csv_path, "r", encoding="utf-8") as f:
+                headers = f.readline().strip().split(",")  # Lire les en-têtes
+                id_regard_index = headers.index("id_regard")
+                id_sig_index = headers.index("id_sig")
+
+                for line in f:
+                    values = line.strip().split(",")
+                    id_regard = values[id_regard_index]
+                    id_sig = values[id_sig_index] if id_sig_index < len(values) else None
+                    if id_regard and id_sig:
+                        correspondance_data[id_regard] = id_sig
+
+            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
+            selected_connection = self.ui.comboBoxConnections.currentText()
+            if not selected_connection:
+                self.log_message("Erreur : Aucune connexion sélectionnée.")
+                QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
+                return
+
+            settings = QgsSettings()
+            prefix = f"PostgreSQL/connections/{selected_connection}/"
+
+            dbname = settings.value(prefix + "database", "")
+            user = self.ui.lineEditDatabaseUser.text() or settings.value(prefix + "username", "")
+            password = self.ui.lineEditDatabasePassword.text() or settings.value(prefix + "password", "")
+            host = settings.value(prefix + "host", "localhost")
+            port = settings.value(prefix + "port", "5432")
+
+            if not dbname or not user or not password:
+                self.log_message("Erreur : Les informations de connexion sont incomplètes.")
+                QMessageBox.critical(self.window, "Erreur", "Les informations de connexion sont incomplètes.")
+                return
+
+            # Connexion à PostgreSQL
+            conn = psycopg2.connect(
+                dbname=dbname,
+                user=user,
+                password=password,
+                host=host,
+                port=port
+            )
+            cursor = conn.cursor()
+
+            # Mettre à jour la colonne id_sig dans itv.ids_reg
+            for id_regard, id_sig in correspondance_data.items():
+                update_query = """
+                    UPDATE itv.ids_reg
+                    SET id_sig = %s
+                    WHERE id_sig IS NULL AND inspection_gid = %s AND id_itv = %s
+                """
+                cursor.execute(update_query, (id_sig, inspection_gid, id_regard))
+
+            # Valider les changements
+            conn.commit()
+            self.log_message(f"Mise à jour de la colonne id_sig dans itv.ids_reg terminée avec succès.")
+
+            # Fermeture de la connexion
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            self.log_message(f"Erreur lors de la mise à jour de la table itv.ids_reg : {str(e)}")
+            QMessageBox.critical(self.window, "Erreur", f"Erreur lors de la mise à jour de la table itv.ids_reg : {str(e)}")
+
     def load_data_to_table(self):
         """
         Charge les données extraites du fichier TXT dans le tableau et insère les métadonnées, passages et données B01 dans la base de données.
         Met à jour la barre de progression pendant le traitement.
         """
+        self.log_message("Importation des données démarrée.")
         file_path = self.ui.filePathLineEdit.text()
-        # Réinitialise la barre de progression
+        self.log_message(f"Chemin du fichier TXT sélectionné : {file_path}")
         self.reset_progress_bar()
 
         # Vérifie si un fichier a été sélectionné
         if not file_path:
-            self.log_message("Erreur : Veuillez sélectionner un fichier TXT avant de continuer.")
+            self.log_message("Erreur : Aucun fichier TXT sélectionné.")
             QMessageBox.warning(self.window, "Erreur", "Veuillez sélectionner un fichier TXT avant de continuer.")
             return
 
         try:
             # Étape 1 : Parse le fichier TXT
+            self.log_message("Analyse du fichier TXT en cours...")
             self.update_progress_bar(10)
             parser = FileParser()
             parsed_data = parser.parse(file_path)
             metadata = parsed_data["metadata"]
             passages = parsed_data["passages"]
+            self.log_message("Analyse du fichier TXT terminée avec succès.")
 
             # Étape 2 : Insère les métadonnées
+            self.log_message("Insertion des métadonnées dans la base de données.")
             self.update_progress_bar(30)
             inspection_gid = self.insert_metadata_to_inspection(file_path, metadata)
 
             if inspection_gid:
                 self.log_message(f"Métadonnées insérées avec succès dans la table `inspection` (gid={inspection_gid}).")
 
-                # Étape 3 : Insère les passages
+                # Étape 5 : Insère les passages
+                self.log_message("Insertion des passages dans la base de données.")
                 self.update_progress_bar(50)
                 self.insert_passages_to_inspection(inspection_gid, passages)
 
-                # Étape 4 : Exécute la fonction SQL après les imports
+                # Étape 6 : Exécute la fonction SQL après les imports
+                self.log_message("Exécution de la fonction SQL `itv.set_id_sig`.")
                 self.update_progress_bar(60)
                 self.execute_set_id_sig(inspection_gid)
 
-                # Étape 5 : Affiche la vue v_inspection dans QGIS
+                # Étape 3 : Met à jour la table itv.ids_coll à partir du fichier CSV
+                self.log_message("Mise à jour de la table `itv.ids_coll` à partir du fichier CSV.")
+                self.update_progress_bar(40)
+                self.update_ids_coll_from_csv(inspection_gid)
+
+                # Étape 4 : Met à jour la table itv.ids_reg à partir du fichier CSV
+                self.log_message("Mise à jour de la table `itv.ids_reg` à partir du fichier CSV.")
+                self.update_progress_bar(45)
+                self.update_ids_reg_from_csv(inspection_gid)
+
+                # Étape 7 : Affiche la vue v_inspection dans QGIS
+                self.log_message("Affichage de la vue `itv.v_inspection` dans QGIS.")
                 self.update_progress_bar(70)
                 self.display_v_inspection_view(inspection_gid)
-                
+
+                self.log_message("Affichage de la vue `itv.v_itv_details_geom` dans QGIS.")
                 self.update_progress_bar(80)
                 self.display_v_itv_details_geom_view(inspection_gid)
-                
+
+                self.log_message("Affichage de la vue `itv.v_itv_details_bcht` dans QGIS.")
                 self.update_progress_bar(90)
                 self.display_v_itv_details_bcht_view(inspection_gid)
 
-                # Étape finale : Terminer la barre de progression
+                # Charger les tables `ids_coll` et `ids_reg` dans QGIS
+                self.log_message("Chargement des tables `ids_coll` et `ids_reg` dans QGIS.")
+                self.update_progress_bar(95)
+                self.load_ids_tables(inspection_gid)
+
+                self.log_message("Processus d'importation terminé avec succès.")
                 self.update_progress_bar(100)
             else:
-                self.log_message("Erreur lors de l'insertion des métadonnées.")
+                self.log_message("Erreur lors de l'insertion des métadonnées. Processus interrompu.")
 
         except Exception as e:
-            self.log_message(f"Erreur lors de la lecture du fichier : {str(e)}")
-            QMessageBox.critical(self.window, "Erreur", f"Erreur lors de la lecture du fichier : {str(e)}")
+            self.log_message(f"Erreur lors de l'importation des données : {str(e)}")
+            QMessageBox.critical(self.window, "Erreur", f"Erreur lors de l'importation des données : {str(e)}")
             self.reset_progress_bar()
 
     def execute_set_id_sig(self, inspection_gid):
@@ -968,7 +1241,7 @@ class ITVPluginMain:
 
     def display_v_inspection_view(self, inspection_gid):
         """
-        Affiche dans QGIS la vue SQL `itv.v_inspection` pour une inspection donnée.
+        Affiche dans QGIS la vue SQL `itv.v_inspection` pour une inspection donnée et zoome sur l'emprise de la couche.
         """
         try:
             # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
@@ -1009,6 +1282,12 @@ class ITVPluginMain:
             if layer.isValid():
                 QgsProject.instance().addMapLayer(layer)
                 self.log_message(f"Vue 'itv.v_inspection' pour l'inspection {inspection_gid} ajoutée avec succès à QGIS.")
+
+                # Zoomer sur l'emprise de la couche
+                self.log_message(f"Zoom sur l'emprise de la couche '{layer_name}'.")
+                canvas = self.iface.mapCanvas()
+                canvas.setExtent(layer.extent())
+                canvas.refresh()
             else:
                 self.log_message(f"Erreur : Impossible de charger la vue 'itv.v_inspection' pour l'inspection {inspection_gid} dans QGIS.")
                 QMessageBox.critical(self.window, "Erreur", f"Impossible de charger la vue 'itv.v_inspection' pour l'inspection {inspection_gid} dans QGIS.")
@@ -1073,7 +1352,6 @@ class ITVPluginMain:
         Affiche dans QGIS la vue SQL `itv.v_itv_details_bcht` pour une inspection donnée.
         """
         try:
-            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
             selected_connection = self.ui.comboBoxConnections.currentText()
             if not selected_connection:
                 self.log_message("Erreur : Aucune connexion sélectionnée.")
