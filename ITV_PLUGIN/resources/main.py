@@ -944,15 +944,7 @@ class ITVPluginMain:
             return
 
         try:
-            # Étape 1 : Nettoyer la table `inspection` si la case est cochée
-            if self.ui.checkBox_CleanTables.isChecked():
-                self.log_message("Nettoyage de la table `inspection` avant le traitement.")
-                self.truncate_inspection_table()
-                self.update_progress_bar(5)
-            else:
-                self.log_message("Nettoyage de la table `inspection` ignoré car la case n'est pas cochée.")
-
-            # Étape 2 : Parse le fichier TXT
+            # Étape 1 : Parse le fichier TXT
             self.log_message("Analyse du fichier TXT en cours...")
             self.update_progress_bar(10)
             parser = FileParser()
@@ -961,63 +953,52 @@ class ITVPluginMain:
             passages = parsed_data["passages"]
             self.log_message("Analyse du fichier TXT terminée avec succès.")
 
-            # Étape 3 : Insère les métadonnées
-            self.log_message("___________________________________________")
+            # Étape 2 : Insère les métadonnées
             self.log_message("Insertion des métadonnées dans la base de données.")
             self.update_progress_bar(30)
             inspection_gid = self.insert_metadata_to_inspection(file_path, metadata)
 
             if inspection_gid:
-                self.log_message("___________________________________________")
                 self.log_message(f"Métadonnées insérées avec succès dans la table `inspection` (gid={inspection_gid}).")
 
-                # Étape 4 : Insère les passages
-                self.log_message("___________________________________________")
+                # Étape 5 : Insère les passages
                 self.log_message("Insertion des passages dans la base de données.")
                 self.update_progress_bar(50)
                 self.insert_passages_to_inspection(inspection_gid, passages)
 
-                # Étape 5 : Exécute la fonction SQL après les imports
-                self.log_message("___________________________________________")
+                # Étape 6 : Exécute la fonction SQL après les imports
                 self.log_message("Exécution de la fonction SQL `itv.set_id_sig`.")
                 self.update_progress_bar(60)
                 self.execute_set_id_sig(inspection_gid)
 
-                # Étape 6 : Met à jour la table itv.ids_coll à partir du fichier CSV
-                self.log_message("___________________________________________")
+                # Étape 3 : Met à jour la table itv.ids_coll à partir du fichier CSV
                 self.log_message("Mise à jour de la table `itv.ids_coll` à partir du fichier CSV.")
                 self.update_progress_bar(40)
                 self.update_ids_coll_from_csv(inspection_gid)
 
-                # Étape 7 : Met à jour la table itv.ids_reg à partir du fichier CSV
-                self.log_message("___________________________________________")
+                # Étape 4 : Met à jour la table itv.ids_reg à partir du fichier CSV
                 self.log_message("Mise à jour de la table `itv.ids_reg` à partir du fichier CSV.")
                 self.update_progress_bar(45)
                 self.update_ids_reg_from_csv(inspection_gid)
 
-                # Étape 8 : Affiche les vues dans QGIS
-                self.log_message("___________________________________________")
+                # Étape 7 : Affiche la vue v_inspection dans QGIS
                 self.log_message("Affichage de la vue `itv.v_inspection` dans QGIS.")
                 self.update_progress_bar(70)
                 self.display_v_inspection_view(inspection_gid)
 
-                self.log_message("___________________________________________")
                 self.log_message("Affichage de la vue `itv.v_itv_details_geom` dans QGIS.")
                 self.update_progress_bar(80)
                 self.display_v_itv_details_geom_view(inspection_gid)
 
-                self.log_message("___________________________________________")
                 self.log_message("Affichage de la vue `itv.v_itv_details_bcht` dans QGIS.")
                 self.update_progress_bar(90)
                 self.display_v_itv_details_bcht_view(inspection_gid)
 
                 # Charger les tables `ids_coll` et `ids_reg` dans QGIS
-                self.log_message("___________________________________________")
                 self.log_message("Chargement des tables `ids_coll` et `ids_reg` dans QGIS.")
                 self.update_progress_bar(95)
                 self.load_ids_tables(inspection_gid)
 
-                self.log_message("___________________________________________")
                 self.log_message("Processus d'importation terminé avec succès.")
                 self.update_progress_bar(100)
             else:
@@ -1415,53 +1396,3 @@ class ITVPluginMain:
         except Exception as e:
             self.log_message(f"Erreur inattendue lors de l'affichage de la vue : {str(e)}")
             QMessageBox.critical(self.window, "Erreur", f"Erreur inattendue : {str(e)}")
-
-    def truncate_inspection_table(self):
-        """
-        Supprime toutes les données de la table `inspection` avec CASCADE pour nettoyer la base avant un nouveau traitement.
-        """
-        try:
-            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
-            selected_connection = self.ui.comboBoxConnections.currentText()
-            if not selected_connection:
-                self.log_message("Erreur : Aucune connexion sélectionnée.")
-                QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
-                return
-
-            settings = QgsSettings()
-            prefix = f"PostgreSQL/connections/{selected_connection}/"
-
-            dbname = settings.value(prefix + "database", "")
-            user = self.ui.lineEditDatabaseUser.text() or settings.value(prefix + "username", "")
-            password = self.ui.lineEditDatabasePassword.text() or settings.value(prefix + "password", "")
-            host = settings.value(prefix + "host", "localhost")
-            port = settings.value(prefix + "port", "5432")
-
-            if not dbname or not user or not password:
-                self.log_message("Erreur : Les informations de connexion sont incomplètes.")
-                QMessageBox.critical(self.window, "Erreur", "Les informations de connexion sont incomplètes.")
-                return
-
-            # Connexion à PostgreSQL
-            conn = psycopg2.connect(
-                dbname=dbname,
-                user=user,
-                password=password,
-                host=host,
-                port=port
-            )
-            cursor = conn.cursor()
-
-            # Exécuter la commande TRUNCATE avec CASCADE
-            truncate_query = "TRUNCATE TABLE itv.inspection CASCADE;"
-            cursor.execute(truncate_query)
-            conn.commit()
-
-            # Log de succès
-            self.log_message("Table `inspection` et ses dépendances supprimées avec succès.")
-
-            # Fermeture de la connexion
-            cursor.close()
-            conn.close()
-        except Exception as e:
-            self.log_message(f"Erreur lors de la suppression des données : {str(e)}")

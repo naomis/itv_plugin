@@ -1,0 +1,7 @@
+[general]
+name= ITV PLUGIN
+qgisMinimumVersion=3.0
+description=Un plugin pour afficher un message dans une table
+version=1.0
+author=NAOMIS
+email=g.noiret@naomis.fr

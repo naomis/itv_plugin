@@ -1,7 +1,52 @@
 [general]
-name= chacaha
+name=ITV Plugin
 qgisMinimumVersion=3.0
-description=Un plugin pour afficher un message dans une table
+qgisMaximumVersion=3.34
+description=Un plugin pour inspecter les ITV, afficher les résultats dans QGIS et gérer les données associées.
+version=1.0.0
+author=NAOMIS
+email=g.noiret@naomis.fr
+tracker=https://github.com/naomis/itv-plugin/issues
+repository=https://github.com/naomis/itv-plugin
+category=Vector
+homepage=https://www.naomis.fr
+changelog=Version 1.0.0 - Première version du plugin :
+  - Affichage des données ITV dans QGIS (vues SQL et tables PostgreSQL)
+  - Importation des données depuis des fichiers TXT et CSV
+  - Mise à jour des tables PostgreSQL avec correspondances
+  - Affichage des couches géométriques dans QGIS
+  - Gestion des connexions PostgreSQL
+  - Barre de progression pour suivre les étapes de traitement
+  - Export des messages au format CSV
+hasProcessingProvider=yes
+experimental=False
+deprecated=False
+
+[about]
+homepage=https://www.naomis.fr
+repository=https://github.com/naomis/itv-plugin
+tracker=https://github.com/naomis/itv-plugin/issues
+icon=resources/logo.png
+description=Un plugin QGIS pour :
+  - Inspecter les ITV et afficher les résultats dans des couches géométriques
+  - Importer et traiter des données depuis des fichiers TXT et CSV
+  - Mettre à jour les tables PostgreSQL avec des correspondances
+  - Afficher les vues SQL dans QGIS
+  - Gérer les connexions PostgreSQL
+  - Exporter les messages et logs
 version=1.0
-author=Votre Nom
-email=votre.email@example.com
+features=
+  - Affichage des données ITV dans des couches géométriques
+  - Importation des données depuis des fichiers TXT et CSV
+  - Mise à jour des tables PostgreSQL avec correspondances
+  - Gestion des connexions PostgreSQL
+  - Barre de progression pour suivre les étapes de traitement
+  - Export des messages au format CSV
+  - Compatibilité avec QGIS 3.x
+  - Interface simple et intuitive
+
+[author]
+name=Gabriel Noiret
+email=g.noiret@naomis.fr
+organization=NAOMIS
+organizationWebsite=https://www.naomis.fr
