@@ -4,18 +4,19 @@ from PyQt5.QtWidgets import QAction, QMainWindow, QTableWidgetItem, QFileDialog,
 from qgis.PyQt.QtCore import Qt
 from .itv_interface import Ui_selectFileButton  # Importer l'interface utilisateur
 import psycopg2
-from qgis.core import QgsVectorLayer, QgsProject
+from qgis.core import QgsVectorLayer, QgsProject, QgsWkbTypes
 from qgis.gui import QgsMapCanvas
 from .file_parser import FileParser
 from qgis.core import QgsProviderRegistry, QgsSettings
 from PyQt5.QtCore import QTimer
-
+from .database_utils import DatabaseUtils
 
 class ITVPluginMain:
     def __init__(self, iface):
         """Constructeur du plugin"""
         self.iface = iface
         self.window = None
+        self.db_utils = None  # Instance de DatabaseUtils
 
     def initGui(self):
         """Initialise l'interface du plugin dans QGIS"""
@@ -45,6 +46,8 @@ class ITVPluginMain:
             self.window = QMainWindow()
             self.ui = Ui_selectFileButton()
             self.ui.setupUi(self.window)
+
+            # Autres connexions existantes
             self.ui.pushButton.clicked.connect(self.select_file)
             self.ui.loadCollecteurButton.clicked.connect(self.select_collecteur_file)
             self.ui.loadRegardButton.clicked.connect(self.select_regard_file)
@@ -59,10 +62,57 @@ class ITVPluginMain:
             self.ui.loadRegardButton_correspondance.clicked.connect(self.select_regard_correspondance_file)
             self.ui.pdfNameLineEdit.textChanged.connect(self.update_checkboxes)
             self.ui.enterpriseNameLineEdit.textChanged.connect(self.update_checkboxes)
-
-        
+            self.ui.comboBox_Collecteur.currentIndexChanged.connect(self.select_collecteur_from_combobox)
+            self.populate_collecteur_combobox()
+            self.ui.comboBox_Regards.currentIndexChanged.connect(self.select_regard_from_combobox)
+            self.populate_regard_combobox()
+            self.db_utils = DatabaseUtils(self.ui, self.log_message)  # Initialiser l'instance de DatabaseUtils
+                    
         # Affiche la fenêtre du plugin
         self.window.show()
+
+    def open_sql_file_viewer(self):
+        """
+        Ouvre une fenêtre pour afficher le contenu du fichier itv.sql.
+        """
+        viewer = SQLFileViewer(self.window)
+        viewer.exec_()
+
+    def populate_collecteur_combobox(self):
+        """
+        Remplit la comboBox_Collecteur avec les couches disponibles dans QGIS.
+        """
+        self.ui.comboBox_Collecteur.clear()
+        layers = QgsProject.instance().mapLayers().values()
+        for layer in layers:
+            if layer.type() == QgsVectorLayer.VectorLayer and layer.geometryType() == QgsWkbTypes.LineGeometry:
+                self.ui.comboBox_Collecteur.addItem(layer.name(), layer.id())
+        self.ui.comboBox_Collecteur.insertItem(0, "Sélectionner une couche", None)
+        self.ui.comboBox_Collecteur.setCurrentIndex(0)
+
+    def select_collecteur_from_combobox(self):
+        """
+        Gère la sélection d'une couche collecteur depuis la comboBox_Collecteur
+        et met à jour collecteurFilePathLabel avec le chemin de la couche.
+        """
+        layer_id = self.ui.comboBox_Collecteur.currentData()
+        if layer_id:
+            layer = QgsProject.instance().mapLayer(layer_id)
+            if layer:
+                # Récupérer le chemin du fichier source de la couche
+                data_source = layer.dataProvider().dataSourceUri()
+                file_path = data_source.split('|')[0]  # Extraire uniquement le chemin du fichier
+                self.ui.collecteurFilePathLabel.setText(file_path)
+                self.ui.checkBox_collecteurs.setChecked(True)
+                self.log_message(f"Chemin de la couche collecteur sélectionnée : {file_path}")
+            else:
+                self.ui.collecteurFilePathLabel.clear()
+                self.ui.checkBox_collecteurs.setChecked(False)
+                self.log_message("Erreur : La couche sélectionnée n'existe pas.")
+        else:
+            self.ui.collecteurFilePathLabel.clear()
+            self.ui.checkBox_collecteurs.setChecked(False)
+            self.log_message("Aucune couche collecteur sélectionnée.")
 
     def select_file(self):
         options = QFileDialog.Options()
@@ -99,45 +149,84 @@ class ITVPluginMain:
             self.log_message("Aucun fichier sélectionné.")
 
     def select_collecteur_file(self):
+        """
+        Permet de sélectionner un fichier shapefile collecteur, le charger dans QGIS,
+        ajouter le chemin du fichier dans comboBox_Collecteur, et définir collecteurFilePathLabel.
+        """
         options = QFileDialog.Options()
-        
-        # Définir un filtre pour accepter uniquement les fichiers shapefile
-        file_path_collecteur, _ = QFileDialog.getOpenFileName(self.window, "Sélectionner un fichier Shapefile Collecteur", "",
-                                                "Shapefile (*.shp);;Tous les fichiers (*)", options=options)
-        
+        file_path_collecteur, _ = QFileDialog.getOpenFileName(
+            self.window, "Sélectionner un fichier Shapefile Collecteur", "",
+            "Shapefile (*.shp);;Tous les fichiers (*)", options=options
+        )
+
         if file_path_collecteur:
             # Vérifier si le fichier est un shapefile valide
             if file_path_collecteur.endswith(".shp") and os.path.exists(file_path_collecteur):
-                # Mettre à jour le QLineEdit (collecteurFilePathLabel) avec le chemin du fichier sélectionné
-                self.ui.collecteurFilePathLabel.setText(file_path_collecteur)
-                self.ui.checkBox_collecteurs.setChecked(True)  # Cocher la case si le fichier est valide
-                self.log_message(f"Shapefile collecteur sélectionné : {file_path_collecteur}")
+                # Charger le shapefile dans QGIS
+                layer_name = os.path.basename(file_path_collecteur).split('.')[0]
+                layer = QgsVectorLayer(file_path_collecteur, layer_name, "ogr")
+                if layer.isValid():
+                    QgsProject.instance().addMapLayer(layer)
+                    self.log_message(f"Shapefile {file_path_collecteur} chargé avec succès dans QGIS.")
+
+                    # Mettre à jour comboBox_Collecteur
+                    self.populate_collecteur_combobox()
+
+                    # Sélectionner automatiquement le nouveau fichier dans comboBox_Collecteur
+                    index = self.ui.comboBox_Collecteur.findText(layer_name)
+                    if index != -1:
+                        self.ui.comboBox_Collecteur.setCurrentIndex(index)
+
+                    # Mettre à jour collecteurFilePathLabel avec le chemin du fichier
+                    self.ui.collecteurFilePathLabel.setText(file_path_collecteur)
+                    self.ui.checkBox_collecteurs.setChecked(True)
+                else:
+                    self.log_message(f"Erreur : Impossible de charger le shapefile {file_path_collecteur} dans QGIS.")
             else:
-                self.ui.checkBox_collecteurs.setChecked(False)  # Décocher la case si le fichier n'est pas valide
+                self.ui.checkBox_collecteurs.setChecked(False)
                 self.log_message(f"Erreur : Le fichier sélectionné n'est pas un shapefile valide : {file_path_collecteur}")
         else:
-            self.ui.checkBox_collecteurs.setChecked(False)  # Décocher la case si aucun fichier n'est sélectionné
             self.log_message("Aucun fichier shapefile collecteur sélectionné.")
 
     def select_regard_file(self):
+        """
+        Permet de sélectionner un fichier shapefile regard, le charger dans QGIS,
+        ajouter le chemin du fichier dans comboBox_Regards, et définir regardFilePathLabel.
+        """
         options = QFileDialog.Options()
-        
-        # Définir un filtre pour accepter uniquement les fichiers shapefile
-        file_path_regard, _ = QFileDialog.getOpenFileName(self.window, "Sélectionner un fichier Shapefile Regard", "",
-                                                "Shapefile (*.shp);;Tous les fichiers (*)", options=options)
-        
+        file_path_regard, _ = QFileDialog.getOpenFileName(
+            self.window, "Sélectionner un fichier Shapefile Regard", "",
+            "Shapefile (*.shp);;Tous les fichiers (*)", options=options
+        )
+
         if file_path_regard:
             # Vérifier si le fichier est un shapefile valide
             if file_path_regard.endswith(".shp") and os.path.exists(file_path_regard):
-                # Mettre à jour le QLineEdit (regardFilePathLabel) avec le chemin du fichier sélectionné
-                self.ui.regardFilePathLabel.setText(file_path_regard)
-                self.ui.checkBox_regards.setChecked(True)  # Cocher la case si le fichier est valide
-                self.log_message(f"Shapefile regard sélectionné : {file_path_regard}")
+                # Charger le shapefile dans QGIS
+                layer_name = os.path.basename(file_path_regard).split('.')[0]
+                layer = QgsVectorLayer(file_path_regard, layer_name, "ogr")
+                if layer.isValid():
+                    QgsProject.instance().addMapLayer(layer)
+                    self.log_message(f"Shapefile {file_path_regard} chargé avec succès dans QGIS.")
+
+                    # Mettre à jour comboBox_Regards
+                    self.populate_regard_combobox()
+
+                    # Sélectionner automatiquement le nouveau fichier dans comboBox_Regards
+                    index = self.ui.comboBox_Regards.findText(layer_name)
+                    if index != -1:
+                        self.ui.comboBox_Regards.setCurrentIndex(index)
+
+                    # Mettre à jour regardFilePathLabel avec le chemin du fichier
+                    self.ui.regardFilePathLabel.setText(file_path_regard)
+                    self.ui.checkBox_regards.setChecked(True)
+                else:
+                    self.log_message(f"Erreur : Impossible de charger le shapefile {file_path_regard} dans QGIS.")
             else:
-                self.ui.checkBox_regards.setChecked(False)  # Décocher la case si le fichier n'est pas valide
+                self.ui.checkBox_regards.setChecked(False)
                 self.log_message(f"Erreur : Le fichier sélectionné n'est pas un shapefile valide : {file_path_regard}")
         else:
-            self.ui.checkBox_regards.setChecked(False)  # Décocher la case si aucun fichier shapefile regard sélectionné.
+            self.log_message("Aucun fichier shapefile regard sélectionné.")
 
     def log_message(self, message):
         max_lines = 1000  # Nombre maximal de lignes de log
@@ -152,52 +241,14 @@ class ITVPluginMain:
 
     def test_database_connection(self):
         """
-        Teste la connexion à la base de données PostgreSQL sélectionnée et met à jour checkBox_connection.
+        Teste la connexion à la base de données PostgreSQL sélectionnée.
         """
-        try:
-            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
-            selected_connection = self.ui.comboBoxConnections.currentText()
-            if not selected_connection:
-                self.log_message("Erreur : Aucune connexion sélectionnée.")
-                QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
-                self.ui.checkBox_connection.setChecked(False)  # Décocher la case
-                return
-
-            settings = QgsSettings()
-            prefix = f"PostgreSQL/connections/{selected_connection}/"
-
-            dbname = settings.value(prefix + "database", "")
-            user = self.ui.lineEditDatabaseUser.text() or settings.value(prefix + "username", "")
-            password = self.ui.lineEditDatabasePassword.text() or settings.value(prefix + "password", "")
-            host = settings.value(prefix + "host", "localhost")
-            port = settings.value(prefix + "port", "5432")
-
-            if not dbname or not user or not password:
-                self.log_message("Erreur : Les informations de connexion sont incomplètes.")
-                QMessageBox.critical(self.window, "Erreur", "Les informations de connexion sont incomplètes.")
-                self.ui.checkBox_connection.setChecked(False)  # Décocher la case
-                return
-
-            # Tester la connexion avec psycopg2
-            conn = psycopg2.connect(
-                dbname=dbname,
-                user=user,
-                password=password,
-                host=host,
-                port=port
-            )
-            self.log_message(f"Connexion réussie à la base de données '{dbname}' sur {host}:{port}.")
-            self.ui.checkBox_connection.setChecked(True)  # Cocher la case
-            conn.close()
-
-        except psycopg2.OperationalError as e:
-            self.log_message(f"Erreur de connexion : {str(e)}")
-            QMessageBox.critical(self.window, "Erreur de connexion", f"Erreur de connexion : {str(e)}")
-            self.ui.checkBox_connection.setChecked(False)  # Décocher la case
-        except Exception as e:
-            self.log_message(f"Erreur inattendue : {str(e)}")
-            QMessageBox.critical(self.window, "Erreur inattendue", f"Erreur inattendue : {str(e)}")
-            self.ui.checkBox_connection.setChecked(False)  # Décocher la case
+        selected_connection = self.ui.comboBoxConnections.currentText()
+        if not selected_connection:
+            self.log_message("Erreur : Aucune connexion sélectionnée.")
+            QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
+            return
+        self.db_utils.test_database_connection(selected_connection)
 
     def import_shapefile_collecteur(self):
         shapefile_path_collecteur = self.ui.collecteurFilePathLabel.text()
@@ -795,7 +846,7 @@ class ITVPluginMain:
                     values = line.strip().split(",")
                     id_troncon = values[id_troncon_index]
                     id_sig = values[id_sig_index] if id_sig_index < len(values) else None
-                    if id_troncon and id_sig:
+                    if id_troncon or id_sig:
                         correspondance_data[id_troncon] = id_sig
 
             # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
@@ -1033,55 +1084,37 @@ class ITVPluginMain:
         Exécute la fonction SQL `itv.set_id_sig` sur la base de données et diffuse un message de succès.
         """
         try:
-            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
             selected_connection = self.ui.comboBoxConnections.currentText()
             if not selected_connection:
                 self.log_message("Erreur : Aucune connexion sélectionnée.")
                 QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
                 return
 
-            settings = QgsSettings()
-            prefix = f"PostgreSQL/connections/{selected_connection}/"
+            with self.db_utils.connection(selected_connection) as conn:
+                cursor = conn.cursor()
+                sql_query = f"SELECT itv.set_id_sig({inspection_gid})"
+                cursor.execute(sql_query)
+                conn.commit()
 
-            dbname = settings.value(prefix + "database", "")
-            user = self.ui.lineEditDatabaseUser.text() or settings.value(prefix + "username", "")
-            password = self.ui.lineEditDatabasePassword.text() or settings.value(prefix + "password", "")
-            host = settings.value(prefix + "host", "localhost")
-            port = settings.value(prefix + "port", "5432")
-
-            if not dbname or not user or not password:
-                self.log_message("Erreur : Les informations de connexion sont incomplètes.")
-                QMessageBox.critical(self.window, "Erreur", "Les informations de connexion sont incomplètes.")
-                return
-
-            # Connexion à PostgreSQL
-            conn = psycopg2.connect(
-                dbname=dbname,
-                user=user,
-                password=password,
-                host=host,
-                port=port
-            )
-            cursor = conn.cursor()
-
-            # Exécuter la fonction SQL
-            sql_query = f"SELECT itv.set_id_sig({inspection_gid})"
-            cursor.execute(sql_query)
-            conn.commit()
-
-            # Log de succès
-            self.log_message("Mise à jour des correspondances effectuée avec succès.")
-            # Diffuser un message de succès (simulé ici, car WS.broadcastToRoom n'est pas défini)
-            ROOM_ID = "some_room_id"  # Remplacez par l'ID de la salle appropriée
-            self.log_message(f"Diffusion au salon {ROOM_ID}: Mise à jour des correspondances effectuée avec succès.")
-
-            # Fermeture de la connexion
-            cursor.close()
-            conn.close()
+                self.log_message("Mise à jour des correspondances effectuée avec succès.")
+                # Diffuser un message de succès (simulé ici, car WS.broadcastToRoom n'est pas défini)
+                ROOM_ID = "some_room_id"  # Remplacez par l'ID de la salle appropriée
+                self.log_message(f"Diffusion au salon {ROOM_ID}: Mise à jour des correspondances effectuée avec succès.")
 
         except Exception as e:
             self.log_message(f"Erreur lors de l'exécution de la fonction SQL : {str(e)}")
             QMessageBox.critical(self.window, "Erreur", f"Erreur lors de l'exécution de la fonction SQL : {str(e)}")
+
+    def truncate_inspection_table(self):
+        """
+        Vide la table `inspection` avec CASCADE.
+        """
+        selected_connection = self.ui.comboBoxConnections.currentText()
+        if not selected_connection:
+            self.log_message("Erreur : Aucune connexion sélectionnée.")
+            QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
+            return
+        self.db_utils.truncate_table(selected_connection, "itv.inspection")
 
     def populate_database_connections(self):
         """
@@ -1418,50 +1451,117 @@ class ITVPluginMain:
 
     def truncate_inspection_table(self):
         """
-        Supprime toutes les données de la table `inspection` avec CASCADE pour nettoyer la base avant un nouveau traitement.
+        Vide la table `inspection` avec CASCADE.
         """
+        selected_connection = self.ui.comboBoxConnections.currentText()
+        if not selected_connection:
+            self.log_message("Erreur : Aucune connexion sélectionnée.")
+            QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
+            return
+        self.db_utils.truncate_table(selected_connection, "itv.inspection")
+
+    def test_database_connection_schema(self):
+        """
+        Teste la connexion à la base de données pour le schéma et met à jour checkBox_connection_schema.
+        """
+        database_name = self.ui.comboBoxConnections_schema.currentText()
+        username = self.ui.lineEditDatabaseUser_schema.text()
+        password = self.ui.lineEditDatabasePassword_schema.text()
+
+        if not database_name or not username or not password:
+            self.ui.logTextEdit_schema.append("❌ Veuillez remplir tous les champs pour tester la connexion.")
+            return
+
         try:
-            # Récupérer les informations de connexion depuis l'interface utilisateur ou QgsSettings
-            selected_connection = self.ui.comboBoxConnections.currentText()
-            if not selected_connection:
-                self.log_message("Erreur : Aucune connexion sélectionnée.")
-                QMessageBox.critical(self.window, "Erreur", "Aucune connexion sélectionnée.")
-                return
-
-            settings = QgsSettings()
-            prefix = f"PostgreSQL/connections/{selected_connection}/"
-
-            dbname = settings.value(prefix + "database", "")
-            user = self.ui.lineEditDatabaseUser.text() or settings.value(prefix + "username", "")
-            password = self.ui.lineEditDatabasePassword.text() or settings.value(prefix + "password", "")
-            host = settings.value(prefix + "host", "localhost")
-            port = settings.value(prefix + "port", "5432")
-
-            if not dbname or not user or not password:
-                self.log_message("Erreur : Les informations de connexion sont incomplètes.")
-                QMessageBox.critical(self.window, "Erreur", "Les informations de connexion sont incomplètes.")
-                return
-
-            # Connexion à PostgreSQL
+            # Simuler une connexion à la base de données (remplacez par la logique réelle)
+            self.ui.logTextEdit_schema.append(f"🔄 Test de connexion à la base de données '{database_name}'...")
+            # Exemple de connexion réelle avec psycopg2
             conn = psycopg2.connect(
-                dbname=dbname,
-                user=user,
+                dbname=database_name,
+                user=username,
                 password=password,
-                host=host,
-                port=port
+                host="localhost",  # Remplacez par l'hôte réel
+                port="5432"        # Remplacez par le port réel
             )
-            cursor = conn.cursor()
-
-            # Exécuter la commande TRUNCATE avec CASCADE
-            truncate_query = "TRUNCATE TABLE itv.inspection CASCADE;"
-            cursor.execute(truncate_query)
-            conn.commit()
-
-            # Log de succès
-            self.log_message("Table `inspection` et ses dépendances supprimées avec succès.")
-
-            # Fermeture de la connexion
-            cursor.close()
             conn.close()
+            self.ui.checkBox_connection_schema.setChecked(True)
+            self.ui.logTextEdit_schema.append("✅ Connexion réussie !")
         except Exception as e:
-            self.log_message(f"Erreur lors de la suppression des données : {str(e)}")
+            self.ui.checkBox_connection_schema.setChecked(False)
+            self.ui.logTextEdit_schema.append(f"❌ Échec de la connexion : {str(e)}")
+
+    def populate_regard_combobox(self):
+        """
+        Remplit la comboBox_Regards avec les couches disponibles dans QGIS.
+        """
+        self.ui.comboBox_Regards.clear()
+        layers = QgsProject.instance().mapLayers().values()
+        for layer in layers:
+            if layer.type() == QgsVectorLayer.VectorLayer and layer.geometryType() == QgsWkbTypes.PointGeometry:
+                self.ui.comboBox_Regards.addItem(layer.name(), layer.id())
+        self.ui.comboBox_Regards.insertItem(0, "Sélectionner une couche", None)
+        self.ui.comboBox_Regards.setCurrentIndex(0)
+
+    def select_regard_from_combobox(self):
+        """
+        Gère la sélection d'une couche regard depuis la comboBox_Regards
+        et met à jour regardFilePathLabel avec le chemin de la couche.
+        """
+        layer_id = self.ui.comboBox_Regards.currentData()
+        if layer_id:
+            layer = QgsProject.instance().mapLayer(layer_id)
+            if layer:
+                # Récupérer le chemin du fichier source de la couche
+                data_source = layer.dataProvider().dataSourceUri()
+                file_path = data_source.split('|')[0]  # Extraire uniquement le chemin du fichier
+                self.ui.regardFilePathLabel.setText(file_path)
+                self.ui.checkBox_regards.setChecked(True)
+                self.log_message(f"Chemin de la couche regard sélectionnée : {file_path}")
+            else:
+                self.ui.regardFilePathLabel.clear()
+                self.ui.checkBox_regards.setChecked(False)
+                self.log_message("Erreur : La couche sélectionnée n'existe pas.")
+        else:
+            self.ui.regardFilePathLabel.clear()
+            self.ui.checkBox_regards.setChecked(False)
+            self.log_message("Aucune couche regard sélectionnée.")
+
+    def select_regard_file(self):
+        """
+        Permet de sélectionner un fichier shapefile regard, le charger dans QGIS,
+        ajouter le chemin du fichier dans comboBox_Regards, et définir regardFilePathLabel.
+        """
+        options = QFileDialog.Options()
+        file_path_regard, _ = QFileDialog.getOpenFileName(
+            self.window, "Sélectionner un fichier Shapefile Regard", "",
+            "Shapefile (*.shp);;Tous les fichiers (*)", options=options
+        )
+
+        if file_path_regard:
+            # Vérifier si le fichier est un shapefile valide
+            if file_path_regard.endswith(".shp") and os.path.exists(file_path_regard):
+                # Charger le shapefile dans QGIS
+                layer_name = os.path.basename(file_path_regard).split('.')[0]
+                layer = QgsVectorLayer(file_path_regard, layer_name, "ogr")
+                if layer.isValid():
+                    QgsProject.instance().addMapLayer(layer)
+                    self.log_message(f"Shapefile {file_path_regard} chargé avec succès dans QGIS.")
+
+                    # Mettre à jour comboBox_Regards
+                    self.populate_regard_combobox()
+
+                    # Sélectionner automatiquement le nouveau fichier dans comboBox_Regards
+                    index = self.ui.comboBox_Regards.findText(layer_name)
+                    if index != -1:
+                        self.ui.comboBox_Regards.setCurrentIndex(index)
+
+                    # Mettre à jour regardFilePathLabel avec le chemin du fichier
+                    self.ui.regardFilePathLabel.setText(file_path_regard)
+                    self.ui.checkBox_regards.setChecked(True)
+                else:
+                    self.log_message(f"Erreur : Impossible de charger le shapefile {file_path_regard} dans QGIS.")
+            else:
+                self.ui.checkBox_regards.setChecked(False)
+                self.log_message(f"Erreur : Le fichier sélectionné n'est pas un shapefile valide : {file_path_regard}")
+        else:
+            self.log_message("Aucun fichier shapefile regard sélectionné.")
