@@ -4,7 +4,7 @@
 
 ## Description
 
-ITV Plugin est un plugin QGIS développé par **NAOMIS** et **Gabriel Noiret**. Il est conçu pour inspecter les ITV (Inspection Technique des Voies), afficher les résultats dans QGIS et gérer les données associées. Il fournit des outils pour importer, traiter et visualiser les données ITV, assurant une intégration transparente avec les bases de données PostgreSQL et les couches géométriques dans QGIS.
+ITV Plugin est un plugin QGIS développé par **NAOMIS**. Il est conçu pour inspecter les ITV (Inspection Technique des Voies), afficher les résultats dans QGIS et gérer les données associées. Il fournit des outils pour importer, traiter et visualiser les données ITV, assurant une intégration transparente avec les bases de données PostgreSQL et les couches géométriques dans QGIS.
 
 Le plugin supporte :
 - Affichage des données ITV dans QGIS (vues SQL et tables PostgreSQL)
