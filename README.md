@@ -47,7 +47,7 @@ Report issues or feature requests via the [issue tracker](https://github.com/nao
 
 ## About
 
-Le plugin ITV a été développé par **NAOMIS** et **Gabriel Noiret**.  
+Le plugin ITV a été développé par **NAOMIS** .  
 Pour toute question, contactez : [g.noiret@naomis.fr](mailto:g.noiret@naomis.fr)  
 Visitez notre site web : [https://www.naomis.fr](https://www.naomis.fr)
 
