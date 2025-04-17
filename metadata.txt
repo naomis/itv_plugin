@@ -1,0 +1,71 @@
+[general]
+name=ITV Plugin
+email=g.noiret@naomis.fr
+author=Gabriel Noiret
+qgisMinimumVersion=3.0
+qgisMaximumVersion=3.34
+description=Un plugin pour inspecter les ITV, afficher les résultats dans QGIS et gérer les données associées.
+    Multilignes autorisées :
+    - Affichage des données ITV dans QGIS (vues SQL et tables PostgreSQL)
+    - Importation des données depuis des fichiers TXT et CSV
+    - Mise à jour des tables PostgreSQL avec correspondances
+    - Affichage des couches géométriques dans QGIS
+    - Gestion des connexions PostgreSQL
+    - Barre de progression pour suivre les étapes de traitement
+    - Export des messages au format CSV
+about=Ce plugin permet d'inspecter les ITV et de gérer les données associées.
+    Multilignes autorisées :
+    - Importation et traitement des données
+    - Mise à jour des tables PostgreSQL
+    - Affichage des couches géométriques
+version=1.0.0
+tracker=https://github.com/naomis/itv-plugin/issues
+repository=https://github.com/naomis/itv-plugin
+
+; optional metadata
+category=Vector
+changelog=Version 1.0.0 - Première version du plugin :
+    - Affichage des données ITV dans QGIS (vues SQL et tables PostgreSQL)
+    - Importation des données depuis des fichiers TXT et CSV
+    - Mise à jour des tables PostgreSQL avec correspondances
+    - Affichage des couches géométriques dans QGIS
+    - Gestion des connexions PostgreSQL
+    - Barre de progression pour suivre les étapes de traitement
+    - Export des messages au format CSV
+tags=ITV,PostgreSQL,QGIS,importation,exportation
+
+homepage=https://www.naomis.fr
+icon=resources/logo.png
+
+experimental=False
+deprecated=False
+plugin_dependencies=
+
+[about]
+homepage=https://www.naomis.fr
+repository=https://github.com/naomis/itv-plugin
+tracker=https://github.com/naomis/itv-plugin/issues
+icon=resources/logo.png
+description=Un plugin QGIS pour :
+  - Inspecter les ITV et afficher les résultats dans des couches géométriques
+  - Importer et traiter des données depuis des fichiers TXT et CSV
+  - Mettre à jour les tables PostgreSQL avec des correspondances
+  - Afficher les vues SQL dans QGIS
+  - Gérer les connexions PostgreSQL
+  - Exporter les messages et logs
+version=1.0
+features=
+  - Affichage des données ITV dans des couches géométriques
+  - Importation des données depuis des fichiers TXT et CSV
+  - Mise à jour des tables PostgreSQL avec correspondances
+  - Gestion des connexions PostgreSQL
+  - Barre de progression pour suivre les étapes de traitement
+  - Export des messages au format CSV
+  - Compatibilité avec QGIS 3.x
+  - Interface simple et intuitive
+
+[author]
+name=Gabriel Noiret
+email=g.noiret@naomis.fr
+organization=NAOMIS
+organizationWebsite=https://www.naomis.fr
