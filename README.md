@@ -4,15 +4,15 @@
 
 ## Description
 
-ITV Plugin is a QGIS plugin designed to inspect ITV (Inspection Technique des Voies) data, display results in QGIS, and manage associated data. It provides tools for importing, processing, and visualizing ITV data, ensuring seamless integration with PostgreSQL databases and geometric layers in QGIS.
+ITV Plugin est un plugin QGIS développé par **NAOMIS** et **Gabriel Noiret**. Il est conçu pour inspecter les ITV (Inspection Technique des Voies), afficher les résultats dans QGIS et gérer les données associées. Il fournit des outils pour importer, traiter et visualiser les données ITV, assurant une intégration transparente avec les bases de données PostgreSQL et les couches géométriques dans QGIS.
 
-The plugin supports:
-- Displaying ITV data in QGIS (SQL views and PostgreSQL tables)
-- Importing data from TXT and CSV files
-- Updating PostgreSQL tables with mappings
-- Managing PostgreSQL connections
-- Exporting messages and logs to CSV
-- Progress tracking for processing steps
+Le plugin supporte :
+- Affichage des données ITV dans QGIS (vues SQL et tables PostgreSQL)
+- Importation de données à partir de fichiers TXT et CSV
+- Mise à jour des tables PostgreSQL avec des mappings
+- Gestion des connexions PostgreSQL
+- Exportation des messages et des journaux en CSV
+- Suivi de la progression des étapes de traitement
 
 ## Features
 
@@ -47,9 +47,9 @@ Report issues or feature requests via the [issue tracker](https://github.com/nao
 
 ## About
 
-The ITV Plugin was developed by **Gabriel Noiret** at **NAOMIS**.  
-For inquiries, contact: [g.noiret@naomis.fr](mailto:g.noiret@naomis.fr)  
-Visit our website: [https://www.naomis.fr](https://www.naomis.fr)
+Le plugin ITV a été développé par **NAOMIS** et **Gabriel Noiret**.  
+Pour toute question, contactez : [g.noiret@naomis.fr](mailto:g.noiret@naomis.fr)  
+Visitez notre site web : [https://www.naomis.fr](https://www.naomis.fr)
 
 ## License
 

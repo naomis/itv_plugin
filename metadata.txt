@@ -1,7 +1,7 @@
 [general]
 name=ITV Plugin
 email=g.noiret@naomis.fr
-author=Gabriel Noiret
+author=Gabriel Noiret, NAOMIS
 qgisMinimumVersion=3.0
 qgisMaximumVersion=3.34
 description=Un plugin pour inspecter les ITV, afficher les résultats dans QGIS et gérer les données associées.
@@ -13,18 +13,18 @@ description=Un plugin pour inspecter les ITV, afficher les résultats dans QGIS 
     - Gestion des connexions PostgreSQL
     - Barre de progression pour suivre les étapes de traitement
     - Export des messages au format CSV
-about=Ce plugin permet d'inspecter les ITV et de gérer les données associées.
+about=Ce plugin est développé par NAOMIS et Gabriel Noiret pour inspecter les ITV et gérer les données associées.
     Multilignes autorisées :
     - Importation et traitement des données
     - Mise à jour des tables PostgreSQL
     - Affichage des couches géométriques
 version=1.0.0
-tracker=https://github.com/naomis/itv-plugin/issues
-repository=https://github.com/naomis/itv-plugin
+tracker=https://github.com/naomis/itv_plugin/issues
+repository=https://github.com/naomis/itv_plugin
 
 ; optional metadata
 category=Vector
-changelog=Version 1.0.0 - Première version du plugin :
+changelog=Version 1.0.0 - Première version publique du plugin :
     - Affichage des données ITV dans QGIS (vues SQL et tables PostgreSQL)
     - Importation des données depuis des fichiers TXT et CSV
     - Mise à jour des tables PostgreSQL avec correspondances
@@ -43,10 +43,10 @@ plugin_dependencies=
 
 [about]
 homepage=https://www.naomis.fr
-repository=https://github.com/naomis/itv-plugin
-tracker=https://github.com/naomis/itv-plugin/issues
+repository=https://github.com/naomis/itv_plugin
+tracker=https://github.com/naomis/itv_plugin/issues
 icon=resources/logo.png
-description=Un plugin QGIS pour :
+description=Un plugin QGIS développé par NAOMIS et Gabriel Noiret pour :
   - Inspecter les ITV et afficher les résultats dans des couches géométriques
   - Importer et traiter des données depuis des fichiers TXT et CSV
   - Mettre à jour les tables PostgreSQL avec des correspondances
@@ -65,7 +65,7 @@ features=
   - Interface simple et intuitive
 
 [author]
-name=Gabriel Noiret
+name=Gabriel Noiret, NAOMIS
 email=g.noiret@naomis.fr
 organization=NAOMIS
 organizationWebsite=https://www.naomis.fr
